@@ -28,9 +28,6 @@ SECRET_KEY = 'django-insecure-v=)e2%m8n&g*b(s4xm7p%04hu5#w5ynjn(ffh^$!%71m_fu3_e
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
-
 # Application definition
 
 INSTALLED_APPS = [
@@ -119,6 +116,7 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = 'en-us'
 
 ALLOWED_HOSTS = ['*']
+
 TIME_ZONE = 'Asia/Seoul'  # Set the global timezone to Korean Standard Time
 
 USE_I18N = True
