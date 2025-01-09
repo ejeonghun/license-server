@@ -42,7 +42,7 @@ def generator(request):
             # 중복된 키가 발생하면 다시 생성
             continue
         except Exception as e:
-            return Response({'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'message': str(e), "success": "false"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 
