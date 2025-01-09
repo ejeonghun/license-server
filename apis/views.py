@@ -1,3 +1,4 @@
+from django.forms import ValidationError
 from django.shortcuts import render
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
@@ -21,7 +22,6 @@ from django.db import transaction
         200: openapi.Response('성공', openapi.Schema(type=openapi.TYPE_OBJECT, properties={
             'license_key': openapi.Schema(type=openapi.TYPE_STRING, example='xxxx-xxxx-xxxx-xxxx-xxxx')
         })),
-        400: '잘못된 요청',
         500: '서버 오류'
     }
 )
@@ -37,12 +37,12 @@ def generator(request):
         # 중복 체크 및 DB에 삽입
         try:
             License.objects.create(license_key=license_key) # DB에 라이선스 키 삽입 및 중복 체크
-            return Response({'license_key': license_key}, status=status.HTTP_200_OK)
+            return Response({"message": "라이선스 키가 생성되었습니다.",'license_key': license_key, "success": "true"}, status=status.HTTP_200_OK)
         except IntegrityError:
             # 중복된 키가 발생하면 다시 생성
             continue
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 
@@ -65,14 +65,8 @@ def generator(request):
         200: openapi.Response('성공', openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'message': openapi.Schema(type=openapi.TYPE_STRING, example='라이선스 키가 성공적으로 활성화되었습니다.')
-            }
-        )),
-        400: openapi.Response('잘못된 요청', openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'error': openapi.Schema(type=openapi.TYPE_STRING, example='이미 활성화된 라이선스 키입니다.'),
-                'error': openapi.Schema(type=openapi.TYPE_STRING, example='이메일 형식 확인 필요')
+                'message': openapi.Schema(type=openapi.TYPE_STRING, example='라이선스 키가 성공적으로 활성화되었습니다.'),
+                'success': openapi.Schema(type=openapi.TYPE_STRING, example='true/false')
             }
         )),
         500: '서버 오류'
@@ -80,49 +74,52 @@ def generator(request):
 )
 @api_view(['post'])
 def activate(request):
+    serializer = UserActivateSerializer(data=request.data)
+
+    # 유효성 검사 수행
+    if not serializer.is_valid():
+        # 오류 메시지 생성
+        error_messages = []
+        for field, errors in serializer.errors.items():
+            for error in errors:
+                error_messages.append(f"{field}: {error}")
+
+        return Response({
+            "message": ", ".join(error_messages),
+            "success": False
+        }, status=status.HTTP_200_OK)  # 200 응답 코드로 반환
+
+    license_key = serializer.validated_data['license_key']
+    hash_key = serializer.validated_data['hash_key']
+    user_name = serializer.validated_data['user_name']
+    email = serializer.validated_data['email']
+    company = serializer.validated_data['company']
+
+    # 라이선스 키로 검색
     try:
-        with transaction.atomic():
-            serializer = UserActivateSerializer(data=request.data)
-            if not serializer.is_valid():
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-            validated_data = serializer.validated_data
-            license = License.objects.select_for_update().get(
-                license_key=validated_data['license_key']
-            )
-
-            if license.is_activation:
-                return Response(
-                    {'error': '이미 활성화된 라이선스 키입니다.'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # 해시키 중복 검사 간소화
-            hashed_key = hash_key_cryto(validated_data['hash_key'])
-            if License.objects.filter(hash_key=hashed_key).exists():
-                return Response(
-                    {'error': '이미 등록된 기기입니다'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # 라이선스 정보 업데이트
-            license.hash_key = hashed_key
-            license.user_name = validated_data['user_name']
-            license.email = validated_data['email']
-            license.company = validated_data['company']
-            license.is_activation = True
-            license.activation_date = timezone.now()
-            license.save()
-
-            return Response(
-                {'message': '라이선스 키가 성공적으로 활성화되었습니다.'}, 
-                status=status.HTTP_200_OK
-            )
-
+        license = License.objects.get(license_key=license_key)
     except License.DoesNotExist:
-        return Response(
-            {'error': '해당 라이선스 키가 존재하지 않습니다.'}, 
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({'message': '해당 라이선스 키가 존재하지 않습니다.', "success": False}, status=status.HTTP_200_OK)
+
+    if license.is_activation:
+        return Response({'message': '이미 활성화된 라이선스 키입니다.', "success": False}, status=status.HTTP_200_OK)
+
+    # 해시키 중복 검사
+    hashed_key = hash_key_cryto(hash_key)
+    if License.objects.filter(hash_key=hashed_key).exists():
+        return Response({'message': '이미 등록된 기기입니다.', "success": False}, status=status.HTTP_200_OK)
+
+    # 활성화 처리
+    license.__dict__.update({
+        'hash_key': hashed_key,
+        'user_name': user_name,
+        'email': email,
+        'company': company,
+        'is_activation': True,
+        'activation_date': timezone.now()  # 현재 시간 기록
+    })
+    license.save()
+
+    return Response({'message': '라이선스 키가 성공적으로 활성화되었습니다.', "success": True}, status=status.HTTP_200_OK)
 
 
