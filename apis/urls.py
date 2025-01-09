@@ -4,6 +4,7 @@ from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 import apis.views as views
+from django.views.generic import RedirectView
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -18,6 +19,7 @@ schema_view = get_schema_view(
 )
 
 urlpatterns = [
+    path('', RedirectView.as_view(url='/admin/', permanent=False)),  # 빈 경로에 대한 리다이렉션
     path('api/generator', views.generator, name='라이선스 키 생성'), # 라이선스 키 생성 API
     path('api/activate', views.activate, name='라이선스 키 활성화'), # 라이선스 키 활성화 API
 ]
