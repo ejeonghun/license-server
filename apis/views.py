@@ -98,10 +98,11 @@ def generator(request): # 라이선스 키 생성 API
     method='post',
     operation_summary="라이선스 키 활성화",
     operation_description="""제공된 라이선스 키를 활성화하고 사용자 정보를 등록합니다.
-                            result : -1 : 필수 입력값 누락
-                                      0 : 라이선스 키 활성화 성공
-                                      1 : 라이선스 키가 존재하지 않음 / 이미 활성화된 라이선스 키
-                                      2 : 이미 등록된 기기
+                            result :  0 : 라이선스 키 활성화 성공
+                                      1 : 필수 입력값 누락
+                                      2 : 이미 활성화된 라이선스 키
+                                      3 : 라이선스 키가 존재하지 않음
+                                      4 : 이미 등록된 기기
                             """,
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
@@ -119,7 +120,7 @@ def generator(request): # 라이선스 키 생성 API
             type=openapi.TYPE_OBJECT,
             properties={
                 'message': openapi.Schema(type=openapi.TYPE_STRING, example='라이선스 키가 성공적으로 활성화되었습니다.'),
-                'result': openapi.Schema(type=openapi.TYPE_STRING, example='필수 입력값 누락 : -1 / 활성화 성공 : 0 / 이미 활성화된 라이선스 키 / 라이선스 존재 X : 1 / 이미 등록된 기기 : 2')
+                'result': openapi.Schema(type=openapi.TYPE_STRING)
             }
         )),
         500: '서버 오류'
@@ -139,7 +140,7 @@ def activate(request): # 라이선스 키 활성화 API
 
         return Response({
             "message": ", ".join(error_messages),
-            "result": -1
+            "result": 1
         }, status=status.HTTP_200_OK)  # 200 응답 코드로 반환
 
     license_key = serializer.validated_data['license_key']
@@ -152,15 +153,15 @@ def activate(request): # 라이선스 키 활성화 API
     try:
         license = License.objects.get(license_key=license_key)
     except License.DoesNotExist:
-        return Response({'message': '해당 라이선스 키가 존재하지 않습니다.', "result": 1}, status=status.HTTP_200_OK)
+        return Response({'message': '해당 라이선스 키가 존재하지 않습니다.', "result": 3}, status=status.HTTP_200_OK) 
 
     if license.is_activation:
-        return Response({'message': '이미 활성화된 라이선스 키입니다.', "result" : 1}, status=status.HTTP_200_OK)
+        return Response({'message': '이미 활성화된 라이선스 키입니다.', "result" : 2}, status=status.HTTP_200_OK)
 
     # 해시키 중복 검사
     hashed_key = hash_key_cryto(hash_key)
     if License.objects.filter(hash_key=hashed_key).exists():
-        return Response({'message': '이미 등록된 기기입니다.', "result" : 2}, status=status.HTTP_200_OK)
+        return Response({'message': '이미 등록된 기기입니다.', "result" : 4}, status=status.HTTP_200_OK)
 
     # 활성화 처리
     license.__dict__.update({
