@@ -8,3 +8,4 @@ class License(models.Model):
     user_name = models.CharField(max_length=100, null=True, blank=True)         # 관리자 이름
     email = models.EmailField(null=True, blank=True)                            # 이메일
     company = models.CharField(max_length=100, null=True, blank=True)           # 병원 또는 사업장 명 
+    created_dt = models.DateTimeField(auto_now_add=True, null=True, blank=True) # 라이선스 생성일

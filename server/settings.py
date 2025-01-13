@@ -57,7 +57,7 @@ ROOT_URLCONF = 'server.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -69,6 +69,10 @@ TEMPLATES = [
         },
     },
 ]
+
+LOGIN_URL = '/'
+LOGIN_REDIRECT_URL = '/dashboard/'
+
 
 WSGI_APPLICATION = 'server.wsgi.application'
 

@@ -1,5 +1,3 @@
-from django.forms import ValidationError
-from django.shortcuts import render
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets, permissions, status
@@ -11,50 +9,105 @@ from django.db import IntegrityError
 from apis.models import License
 from django.utils import timezone
 from apis.serializers import UserActivateSerializer
-from apis.helper import hash_key_cryto, is_hash_key_valid
-from django.db import transaction
-
+from apis.helper import hash_key_cryto
+from django.shortcuts import render, redirect
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.views.decorators.csrf import csrf_protect
+from .models import License
+import random
+import string
+from django.db.models import Q
 
 @swagger_auto_schema(
     method='post',
     operation_summary="라이선스 키 생성",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['id', 'password'],
+        properties={
+            'id': openapi.Schema(type=openapi.TYPE_STRING, description="관리자 아이디"),
+            'password': openapi.Schema(type=openapi.TYPE_STRING, description="관리자 비밀번호"),
+        }
+    ),
     responses={
-        200: openapi.Response('성공', openapi.Schema(type=openapi.TYPE_OBJECT, properties={
-            'license_key': openapi.Schema(type=openapi.TYPE_STRING, example='xxxx-xxxx-xxxx-xxxx-xxxx')
-        })),
+        200: openapi.Response('응답', openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'message': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='응답 메시지',
+                    example='라이선스 키가 생성되었습니다./아이디와 비밀번호는 필수 입력값입니다./관리자 계정만 접근 가능합니다.'
+                ),
+                'license_key': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='생성된 라이선스 키',
+                    example='xxxx-xxxx-xxxx-xxxx-xxxx'
+                ),
+                'result': openapi.Schema(
+                    type=openapi.TYPE_INTEGER, 
+                    description='결과 코드 (0: 성공, -1: 실패)',
+                    example=0
+                )
+            }
+        )),
         500: '서버 오류'
     }
 )
 @api_view(['post'])
-def generator(request):
+def generator(request): # 라이선스 키 생성 API
+    id = request.data.get('id')
+    password = request.data.get('password')
+
+    if not id or not password:
+        return Response({"message": "아이디와 비밀번호는 필수 입력값입니다.", "result": -1}, 
+                      status=status.HTTP_200_OK)
+
+    user = authenticate(username=id, password=password)
+    if user is None or not user.is_superuser:
+        return Response({"message": "관리자 계정만 접근 가능합니다.", "result": -1}, 
+                      status=status.HTTP_200_OK)
+
     def generate_license_key():
-        """라이선스 키를 생성하는 함수"""
-        return '-'.join([''.join(random.choices(string.ascii_lowercase + string.digits, k=4)) for _ in range(5)])
+        return '-'.join([''.join(random.choices(string.ascii_lowercase + string.digits, k=4)) 
+                        for _ in range(5)])
 
     while True:
         license_key = generate_license_key()
-
-        # 중복 체크 및 DB에 삽입
         try:
-            License.objects.create(license_key=license_key) # DB에 라이선스 키 삽입 및 중복 체크
-            return Response({"message": "라이선스 키가 생성되었습니다.",'license_key': license_key, "success": "true"}, status=status.HTTP_200_OK)
+            if License.objects.filter(license_key=license_key).exists(): # 중복된 라이선스 키가 있는 경우 다시 생성
+                continue
+            License.objects.create(license_key=license_key)
+            return Response({
+                "message": "라이선스 키가 생성되었습니다.",
+                'license_key': license_key, 
+                "result": 0
+            }, status=status.HTTP_200_OK)
         except IntegrityError:
-            # 중복된 키가 발생하면 다시 생성
             continue
         except Exception as e:
-            return Response({'message': str(e), "success": "false"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                'message': str(e), 
+                "result": -1
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 
 @swagger_auto_schema(
     method='post',
     operation_summary="라이선스 키 활성화",
-    operation_description="제공된 라이선스 키를 활성화하고 사용자 정보를 등록합니다.",
+    operation_description="""제공된 라이선스 키를 활성화하고 사용자 정보를 등록합니다.
+                            result : -1 : 필수 입력값 누락
+                                      0 : 라이선스 키 활성화 성공
+                                      1 : 라이선스 키가 존재하지 않음 / 이미 활성화된 라이선스 키
+                                      2 : 이미 등록된 기기
+                            """,
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
         required=['license_key', 'hash_key', 'user_name', 'email', 'company'],
         properties={
-            'license_key': openapi.Schema(type=openapi.TYPE_STRING, description="활성화할 라이선스 키"),
+            'license_key': openapi.Schema(type=openapi.TYPE_STRING, description="활성화할 라이선스 키", example='xxxx-xxxx-xxxx-xxxx-xxxx'),
             'hash_key': openapi.Schema(type=openapi.TYPE_STRING, description="기기 고유 식별자"),
             'user_name': openapi.Schema(type=openapi.TYPE_STRING, description="사용자 이름"),
             'email': openapi.Schema(type=openapi.TYPE_STRING, description="사용자 이메일"),
@@ -66,14 +119,14 @@ def generator(request):
             type=openapi.TYPE_OBJECT,
             properties={
                 'message': openapi.Schema(type=openapi.TYPE_STRING, example='라이선스 키가 성공적으로 활성화되었습니다.'),
-                'success': openapi.Schema(type=openapi.TYPE_STRING, example='true/false')
+                'result': openapi.Schema(type=openapi.TYPE_STRING, example='필수 입력값 누락 : -1 / 활성화 성공 : 0 / 이미 활성화된 라이선스 키 / 라이선스 존재 X : 1 / 이미 등록된 기기 : 2')
             }
         )),
         500: '서버 오류'
     }
 )
 @api_view(['post'])
-def activate(request):
+def activate(request): # 라이선스 키 활성화 API
     serializer = UserActivateSerializer(data=request.data)
 
     # 유효성 검사 수행
@@ -86,7 +139,7 @@ def activate(request):
 
         return Response({
             "message": ", ".join(error_messages),
-            "success": False
+            "result": -1
         }, status=status.HTTP_200_OK)  # 200 응답 코드로 반환
 
     license_key = serializer.validated_data['license_key']
@@ -99,15 +152,15 @@ def activate(request):
     try:
         license = License.objects.get(license_key=license_key)
     except License.DoesNotExist:
-        return Response({'message': '해당 라이선스 키가 존재하지 않습니다.', "success": False}, status=status.HTTP_200_OK)
+        return Response({'message': '해당 라이선스 키가 존재하지 않습니다.', "result": 1}, status=status.HTTP_200_OK)
 
     if license.is_activation:
-        return Response({'message': '이미 활성화된 라이선스 키입니다.', "success": False}, status=status.HTTP_200_OK)
+        return Response({'message': '이미 활성화된 라이선스 키입니다.', "result" : 1}, status=status.HTTP_200_OK)
 
     # 해시키 중복 검사
     hashed_key = hash_key_cryto(hash_key)
     if License.objects.filter(hash_key=hashed_key).exists():
-        return Response({'message': '이미 등록된 기기입니다.', "success": False}, status=status.HTTP_200_OK)
+        return Response({'message': '이미 등록된 기기입니다.', "result" : 2}, status=status.HTTP_200_OK)
 
     # 활성화 처리
     license.__dict__.update({
@@ -120,6 +173,144 @@ def activate(request):
     })
     license.save()
 
-    return Response({'message': '라이선스 키가 성공적으로 활성화되었습니다.', "success": True}, status=status.HTTP_200_OK)
+    return Response({'message': '라이선스 키가 성공적으로 활성화되었습니다.', "result": 0}, status=status.HTTP_200_OK)
+
+
+@swagger_auto_schema(
+    method='post',
+    operation_summary="라이선스 해시키 확인",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['hash_key'],
+        properties={
+            'hash_key': openapi.Schema(
+                type=openapi.TYPE_STRING, 
+                description="기기 고유 식별자"
+            ),
+        }
+    ),
+    responses={
+        200: openapi.Response('응답', openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'message': openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='응답 메시지',
+                    example='이 기기는 이미 활성화 됨/이 기기는 활성화 되지 않음/필수 입력값 누락'
+                ),
+                'result': openapi.Schema(
+                    type=openapi.TYPE_INTEGER, 
+                    description='결과 코드 (0: 성공, 1: 실패)',
+                    example=0
+                ),
+                "hash_key": openapi.Schema(
+                    type=openapi.TYPE_STRING, 
+                    description='활성화 여부 확인 한 해시 키',
+                    example='string'
+                )
+            }
+        )),
+        500: '서버 오류'
+    }
+)
+@api_view(['post']) # 해시 키로 기기 활성화 여부 조회 API
+def license(request):
+    hash_key = request.data.get('hash_key')
+
+    if not hash_key:
+        return Response({'message': '필수 입력값 누락', "result": -1}, status=status.HTTP_200_OK)
+    
+    hashed_key = hash_key_cryto(hash_key)
+
+    try:
+        license = License.objects.filter(hash_key=hashed_key).exists()
+        if license:
+            return Response({'message': '이 기기는 이미 활성화 됨', "hash_key": hash_key, "result": 0}, status=status.HTTP_200_OK)
+        else:
+            return Response({'message': '이 기기는 활성화 되지 않음',"hash_key": hash_key , "result": 1}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({'message': str(e), "result": -1}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# View 로그인 로직
+@csrf_protect
+def login_view(request):
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+        
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        user = authenticate(request, username=username, password=password)
+        
+        if user is not None and user.is_superuser:
+            login(request, user)
+            return redirect('dashboard')
+        else:
+            messages.error(request, '아이디, 비밀번호를 확인해주세요.')
+            
+    return render(request, 'login.html')
+
+# View 로그아웃 로직
+@login_required
+def logout_view(request):
+    logout(request)
+    return redirect('login')
+
+# View 페이지에서 사용되는 대시보드 로직
+@login_required
+def dashboard(request):
+    if not request.user.is_superuser:
+        return redirect('login')
+    
+    licenses = License.objects.all()
+    
+    # 검색 처리
+    search_query = request.GET.get('search', '')
+    if search_query:
+        licenses = licenses.filter(
+            Q(license_key__icontains=search_query) |
+            Q(user_name__icontains=search_query) |
+            Q(company__icontains=search_query)
+        )
+    
+    # 정렬 처리
+    sort = request.GET.get('sort', '')
+    if sort == 'activation':
+        licenses = licenses.filter(is_activation=True).order_by('-activation_date')
+    elif sort == 'inactive':
+        licenses = licenses.filter(is_activation=False).order_by('-activation_date')
+    else:
+        licenses = licenses.order_by('-activation_date')
+    
+    return render(request, 'dashboard.html', {'licenses': licenses})
+
+
+# View 페이지에서 사용되는 라이선스 생성 로직 
+@login_required
+def create_license(request):
+    if request.method == 'POST':
+        def generate_license_key():
+            return '-'.join([''.join(random.choices(string.ascii_lowercase + string.digits, k=4)) for _ in range(5)])
+
+        try:
+            while True:
+                license_key = generate_license_key()
+                try:
+                    if License.objects.filter(license_key=license_key).exists(): # 중복된 라이선스 키가 있는 경우 다시 생성
+                        continue
+                    License.objects.create(
+                        license_key=license_key,
+                        hash_key='',  # 초기에는 빈 값
+                        is_activation=False
+                    )
+                    messages.success(request, '라이센스가 성공적으로 생성되었습니다. 생성된 라이센스 키: ' + license_key)
+                    break
+                except:
+                    continue
+        except Exception as e:
+            messages.error(request, f'라이센스 생성 중 오류가 발생했습니다: {str(e)}')
+
+    return redirect('dashboard')
+
 
 

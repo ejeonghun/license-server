@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3 class="card-title">라이센스 관리</h3>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createLicenseModal">
+                새 라이센스 생성
+            </button>
+        </div>
+        
+        <!-- 검색 및 정렬 폼 -->
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <form method="get" class="d-flex">
+                    <input type="text" name="search" class="form-control me-2" 
+                           placeholder="라이센스 키, 사용자, 회사명으로 검색" 
+                           value="{{ request.GET.search }}">
+                    <button type="submit" class="btn btn-outline-primary">검색</button>
+                </form>
+            </div>
+            <div class="col-md-6 text-end">
+                <div class="btn-group">
+                    <a href="?sort=activation" class="btn btn-outline-secondary {% if request.GET.sort == 'activation' %}active{% endif %}">
+                        활성화순
+                    </a>
+                    <a href="?sort=inactive" class="btn btn-outline-secondary {% if request.GET.sort == 'inactive' %}active{% endif %}">
+                        미활성화순
+                    </a>
+
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>라이센스 키</th>
+                        <th>활성화 상태</th>
+                        <th>사용자</th>
+                        <th>회사</th>
+                        <th>이메일</th>
+                        <th>활성화 일자</th>
+                        <th>해시키</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for license in licenses %}
+                    <tr>
+                        <td>{{ license.license_key }}</td>
+                        <td>{% if license.is_activation %}활성화{% else %}미활성화{% endif %}</td>
+                        <td>{{ license.user_name|default:"-" }}</td>
+                        <td>{{ license.company|default:"-" }}</td>
+                        <td>{{ license.email|default:"-"}}</td>
+                        <td>{{ license.activation_date|date:"Y년 m월 d일 H:i"|default:"-" }}</td>
+                        <td style="font-size: 0.9rem">{{ license.hash_key }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 라이센스 생성 모달 -->
+<div class="modal fade" id="createLicenseModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">새 라이센스 생성</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'create_license' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <p>새로운 라이센스를 생성하시겠습니까?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                    <button type="submit" class="btn btn-primary">생성</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

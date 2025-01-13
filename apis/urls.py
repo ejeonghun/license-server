@@ -19,12 +19,16 @@ schema_view = get_schema_view(
 )
 
 urlpatterns = [
-    path('', RedirectView.as_view(url='/admin/', permanent=False)),  # 빈 경로에 대한 리다이렉션
-    path('api/generator', views.generator, name='라이선스 키 생성'), # 라이선스 키 생성 API
-    path('api/activate', views.activate, name='라이선스 키 활성화'), # 라이선스 키 활성화 API
+    path('', views.login_view, name='login'),                                           # View 로그인 로직
+    path('logout/', views.logout_view, name='logout'),                                  # View 로그아웃 로직
+    path('dashboard/', views.dashboard, name='dashboard'),                              # View 대시보드 로직
+    path('create-license/', views.create_license, name='create_license'),               # View 라이선스 생성 로직
+    path('api/generator', views.generator, name='라이선스 키 생성'),                        # 라이선스 키 생성 API
+    path('api/activate', views.activate, name='라이선스 키 활성화'),                        # 라이선스 키 활성화 API
+    path('api/license', views.license, name='해시 키 활성화 여부 조회'),                     # 해시 키로 활성화 여부 조회 API
 ]
 
-if settings.DEBUG:
+if settings.DEBUG: # 개발 환경에서만 스웨거 사용
     urlpatterns += [
         re_path(r'^docs(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name="schema-json"),
         re_path(r'^docs/$', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
