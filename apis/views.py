@@ -1,3 +1,4 @@
+from django.http import HttpResponse
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets, permissions, status
@@ -19,6 +20,8 @@ from .models import License
 import random
 import string
 from django.db.models import Q
+import pandas as pd
+import openpyxl
 
 @swagger_auto_schema(
     method='post',
@@ -315,3 +318,57 @@ def create_license(request):
 
 
 
+# views.py
+@login_required
+def delete_licenses(request):
+    if request.method == 'POST':
+        license_keys = request.POST.getlist('license_keys[]')
+        if license_keys:
+            try:
+                deleted_count = License.objects.filter(license_key__in=license_keys).delete()[0]
+                messages.success(request, f'{deleted_count}개의 라이선스가 삭제되었습니다.')
+            except Exception as e:
+                messages.error(request, f'라이선스 삭제 중 오류가 발생했습니다: {str(e)}')
+    return redirect('dashboard')
+
+
+
+
+@login_required
+def excel_download(request):    
+    licenses = License.objects.all()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(['라이선스 키', '해시 키', '사용자 이름', '이메일', '회사', '활성화 여부', '활성화 날짜'])
+    
+    for license in licenses:
+        ws.append([
+            license.license_key,
+            license.hash_key,
+            license.user_name,
+            license.email,
+            license.company,
+            '활성화' if license.is_activation else '비활성화',
+            license.activation_date.strftime('%Y-%m-%d %H:%M:%S') if license.activation_date else ''
+        ])
+
+    # 컬럼 너비 자동 조절
+    for column in ws.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+                
+        adjusted_width = (max_length + 2) * 1.2
+        ws.column_dimensions[column_letter].width = adjusted_width
+    
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename=licenses.xlsx'
+    wb.save(response)
+    
+    return response

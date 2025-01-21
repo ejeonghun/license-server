@@ -4,9 +4,18 @@
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h3 class="card-title">라이센스 관리</h3>
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createLicenseModal">
-                새 라이센스 생성
-            </button>
+            <div>
+                <form action='/download' method='post' class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-secondary me-2">엑셀 다운로드</button>
+                </form>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createLicenseModal">
+                    새 라이센스 생성
+                </button>
+                <button class="btn btn-danger me-2" id="deleteBtn" style="display: none;">
+                    삭제
+                </button>
+            </div>
         </div>
         
         <!-- 검색 및 정렬 폼 -->
@@ -27,38 +36,50 @@
                     <a href="?sort=inactive" class="btn btn-outline-secondary {% if request.GET.sort == 'inactive' %}active{% endif %}">
                         미활성화순
                     </a>
-
                 </div>
             </div>
         </div>
 
         <div class="table-responsive">
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>라이센스 키</th>
-                        <th>활성화 상태</th>
-                        <th>사용자</th>
-                        <th>회사</th>
-                        <th>이메일</th>
-                        <th>활성화 일자</th>
-                        <th>해시키</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for license in licenses %}
-                    <tr>
-                        <td>{{ license.license_key }}</td>
-                        <td>{% if license.is_activation %}활성화{% else %}미활성화{% endif %}</td>
-                        <td>{{ license.user_name|default:"-" }}</td>
-                        <td>{{ license.company|default:"-" }}</td>
-                        <td>{{ license.email|default:"-"}}</td>
-                        <td>{{ license.activation_date|date:"Y년 m월 d일 H:i"|default:"-" }}</td>
-                        <td style="font-size: 0.9rem">{{ license.hash_key }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <form id="licensesForm" action="{% url 'delete_licenses' %}" method="post">
+                {% csrf_token %}
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>
+                                <input type="checkbox" id="selectAll" class="form-check-input">
+                            </th>
+                            <th>라이센스 키</th>
+                            <th>활성화 상태</th>
+                            <th>사용자</th>
+                            <th>회사</th>
+                            <th>이메일</th>
+                            <th>활성화 일자</th>
+                            <th>해시키</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for license in licenses %}
+                        <tr>
+                            <td>
+                                <input type="checkbox" name="license_keys[]" 
+                                       value="{{ license.license_key }}" 
+                                       class="form-check-input license-checkbox">
+                            </td>
+                            <td>{{ license.license_key }}</td>
+                            <td>{% if license.is_activation %}활성화{% else %}미활성화{% endif %}</td>
+                            <td>{{ license.user_name|default:"-" }}</td>
+                            <td>{{ license.company|default:"-" }}</td>
+                            <td>{{ license.email|default:"-"}}</td>
+                            <td>{{ license.activation_date|date:"Y년 m월 d일 H:i"|default:"-" }}</td>
+                            <td style="font-size: 0.9rem; cursor: pointer;" class="hash-key-cell" data-hash-key="{{ license.hash_key }}">
+                                {{ license.hash_key|truncatechars:20 }}
+                            </td>                            
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </form>
         </div>
     </div>
 </div>
@@ -84,4 +105,124 @@
         </div>
     </div>
 </div>
+
+<!-- 삭제 확인 모달 -->
+<div class="modal fade" id="deleteModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">라이선스 삭제</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="deleteModalMessage"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-danger" id="confirmDelete">삭제</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- 해시키 표시 모달 -->
+<div class="modal fade" id="hashKeyModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">해시키</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <code id="hashKeyText" style="word-break: break-all;"></code>
+                    <button class="btn btn-sm btn-outline-primary ms-2" id="copyHashKey">
+                        복사
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('licensesForm');
+    const selectAll = document.getElementById('selectAll');
+    const licenseCheckboxes = document.getElementsByClassName('license-checkbox');
+    const deleteBtn = document.getElementById('deleteBtn');
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    const deleteModalMessage = document.getElementById('deleteModalMessage');
+    const confirmDeleteBtn = document.getElementById('confirmDelete');
+    
+    // 전체 선택 체크박스
+    selectAll.addEventListener('change', function() {
+        Array.from(licenseCheckboxes).forEach(checkbox => {
+            checkbox.checked = selectAll.checked;
+        });
+        updateDeleteButtonVisibility();
+    });
+    
+    // 개별 체크박스
+    Array.from(licenseCheckboxes).forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            updateDeleteButtonVisibility();
+            // 모든 체크박스가 선택되었는지 확인
+            const allChecked = Array.from(licenseCheckboxes).every(cb => cb.checked);
+            selectAll.checked = allChecked;
+        });
+    });
+    
+    // 삭제 버튼 표시 여부
+    function updateDeleteButtonVisibility() {
+        const checkedCount = Array.from(licenseCheckboxes).filter(cb => cb.checked).length;
+        deleteBtn.style.display = checkedCount > 0 ? 'inline-block' : 'none';
+    }
+    
+    // 삭제 버튼 클릭
+    deleteBtn.addEventListener('click', function() {
+        const checkedBoxes = Array.from(licenseCheckboxes).filter(cb => cb.checked);
+        const count = checkedBoxes.length;
+        deleteModalMessage.textContent = `선택한 ${count}개의 라이선스를 삭제하시겠습니까?`;
+        deleteModal.show();
+    });
+    
+    // 삭제 확인
+    confirmDeleteBtn.addEventListener('click', function() {
+        form.submit();
+        deleteModal.hide();
+    });
+
+
+
+    // 해시키 모달 관련
+    const hashKeyModal = new bootstrap.Modal(document.getElementById('hashKeyModal'));
+    const hashKeyText = document.getElementById('hashKeyText');
+    const copyHashKeyBtn = document.getElementById('copyHashKey');
+
+    // 해시키 셀 클릭 이벤트
+    document.querySelectorAll('.hash-key-cell').forEach(cell => {
+        cell.addEventListener('click', function() {
+            const hashKey = this.dataset.hashKey;
+            hashKeyText.textContent = hashKey;
+            hashKeyModal.show();
+        });
+    });
+
+    // 해시키 복사 버튼
+    copyHashKeyBtn.addEventListener('click', function() {
+        navigator.clipboard.writeText(hashKeyText.textContent).then(() => {
+            copyHashKeyBtn.textContent = '복사됨';
+            setTimeout(() => {
+                copyHashKeyBtn.textContent = '복사';
+            }, 1000);
+        });
+    });
+
+});
+</script>
 {% endblock %}

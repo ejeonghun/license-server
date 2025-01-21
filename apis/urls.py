@@ -23,9 +23,13 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),                                  # View 로그아웃 로직
     path('dashboard/', views.dashboard, name='dashboard'),                              # View 대시보드 로직
     path('create-license/', views.create_license, name='create_license'),               # View 라이선스 생성 로직
+    path('download', views.excel_download, name='라이선스 다운로드'),                             # View 엑셀 다운로드 로직
+    path('delete', views.delete_licenses, name='delete_licenses'),                                    # View 라이선스 삭제 로직
+
     path('api/generator', views.generator, name='라이선스 키 생성'),                        # 라이선스 키 생성 API
     path('api/activate', views.activate, name='라이선스 키 활성화'),                        # 라이선스 키 활성화 API
     path('api/license', views.license, name='해시 키 활성화 여부 조회'),                     # 해시 키로 활성화 여부 조회 API
+    
 ]
 
 if settings.DEBUG: # 개발 환경에서만 스웨거 사용
