@@ -51,4 +51,9 @@ jobs:
             docker exec ee17287ff1ee /bin/bash -c "python manage.py migrate"
             docker exec ee17287ff1ee /bin/bash -c "python manage.py collectstatic --noinput > /dev/null 2>&1"
             docker exec ee17287ff1ee /bin/bash -c "bash ./restart_django.sh"
+            rm -rf ~/static && mkdir -p ~/static
+            docker cp ee17287ff1ee:/app/static ~/static
+            docker exec 7a71d4c52451 rm -rf /data/static/*
+            docker cp ~/static 7a71d4c52451:/data/static
+            rm -rf ~/static
             
