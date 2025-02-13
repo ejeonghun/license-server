@@ -14,19 +14,25 @@ from pathlib import Path
 import os
 
 import dotenv
-dotenv.load_dotenv()
+dotenv.load_dotenv(override=True)
+
+SECRETKEY = os.getenv('SECRET_KEY') # 시크릿
+ENVIRONMENT = os.getenv('ENVIRONMENT') # 환경
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-v=)e2%m8n&g*b(s4xm7p%04hu5#w5ynjn(ffh^$!%71m_fu3_e'
+SECRET_KEY = SECRETKEY
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+if ENVIRONMENT == 'prod':
+    DEBUG = False
+else:
+    DEBUG = True
 
 # Application definition
 
@@ -137,3 +143,25 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+### HTTPS 설정 관련
+# CSRF Https 적용 옵션
+USE_X_FORWARDED_HOST = True
+
+# CSRF 토큰 허용 Origin
+CSRF_TRUSTED_ORIGINS = [ 
+    'https://license.aicu.life',
+    'http://localhost:8005',
+]
+
+# 프록시 허용
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') 
+
+if DEBUG:
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+else:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
