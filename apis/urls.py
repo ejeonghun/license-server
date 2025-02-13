@@ -32,9 +32,7 @@ urlpatterns = [
     path('api/license', views.license, name='해시 키 활성화 여부 조회'),                     # 해시 키로 활성화 여부 조회 API
     
 ]
-
-if settings.DEBUG: # 개발 환경에서만 스웨거 사용
-    urlpatterns += [
+urlpatterns += [ # 스웨거
         re_path(r'^docs(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name="schema-json"),
         re_path(r'^docs/$', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
         re_path(r'^redoc/$', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),    ]
