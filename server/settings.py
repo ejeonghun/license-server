@@ -154,6 +154,7 @@ USE_X_FORWARDED_HOST = True
 CSRF_TRUSTED_ORIGINS = [ 
     'https://license.aicu.life',
     'http://localhost:8005',
+    'http://192.168.0.22:8005'
 ]
 
 # 프록시 허용
